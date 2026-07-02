@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "一款优雅的时间轴日记增强插件。",
   "author": "xiaoshuhu02",
-  "entry": "https://raw.githubusercontent.com/xiaoshuhu02/roche-diary/main/diary-plugin.js",
+  "entry": "https://raw.githubusercontent.com/xiaoshuhu02/roche-diary/refs/heads/main/diary-plugin.js",
   "hash": "",
   "permissions": [
     "character:read",
