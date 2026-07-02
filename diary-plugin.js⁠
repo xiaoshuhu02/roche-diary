@@ -1,0 +1,557 @@
+window.RochePlugin.register({
+  id: "roche-time-diary",
+  name: "时光日记本",
+  version: "1.0.0",
+  apps: [
+    {
+      id: "roche-time-diary-app",
+      name: "时光日记",
+      icon: "book",
+      iconImage: "",
+      
+      async mount(container, roche) {
+        // 创建独立运行的沙箱样式与 DOM 根节点
+        const styleId = "roche-plugin-diary-style";
+        if (!document.getElementById(styleId)) {
+          const style = document.createElement("style");
+          style.id = styleId;
+          style.innerHTML = `
+            .roche-plugin-diary {
+              width: 100%;
+              height: 100%;
+              background-color: #f7f7f9;
+              color: #333333;
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              box-sizing: border-box;
+              position: relative;
+              overflow-y: auto;
+              padding-bottom: 80px;
+            }
+            .roche-plugin-diary *, .roche-plugin-diary *::before, .roche-plugin-diary *::after {
+              box-sizing: border-box;
+            }
+            /* 顶部导航栏 */
+            .diary-header {
+              position: sticky;
+              top: 0;
+              background-color: rgba(247, 247, 249, 0.95);
+              backdrop-filter: blur(10px);
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              padding: 12px 16px;
+              border-bottom: 1px solid #eaeaea;
+              z-index: 10;
+            }
+            .diary-header-left {
+              display: flex;
+              align-items: center;
+              gap: 12px;
+            }
+            .diary-btn-back {
+              background: none;
+              border: none;
+              font-size: 20px;
+              cursor: pointer;
+              color: #555;
+              padding: 4px;
+            }
+            .diary-filter-selectors {
+              display: flex;
+              gap: 8px;
+            }
+            .diary-select {
+              background: #ffffff;
+              border: 1px solid #dddddd;
+              border-radius: 6px;
+              padding: 4px 8px;
+              font-size: 14px;
+              color: #444;
+              cursor: pointer;
+              outline: none;
+            }
+            .diary-header-title {
+              font-size: 16px;
+              font-weight: 600;
+              color: #222;
+            }
+            /* 时间轴日记列表容器 */
+            .diary-timeline {
+              max-width: 600px;
+              margin: 0 auto;
+              padding: 16px;
+            }
+            /* 单条日记外层包裹 */
+            .diary-item {
+              display: flex;
+              margin-bottom: 24px;
+              align-items: flex-start;
+            }
+            /* 左侧时间列 */
+            .diary-date-col {
+              width: 75px;
+              flex-shrink: 0;
+              text-align: left;
+              padding-top: 4px;
+            }
+            .diary-date-day {
+              font-size: 26px;
+              font-weight: 700;
+              color: #333333;
+              line-height: 1;
+            }
+            .diary-date-sub {
+              font-size: 11px;
+              color: #8a8a8f;
+              margin-top: 4px;
+            }
+            /* 右侧内容卡片 */
+            .diary-card {
+              flex-grow: 1;
+              background: #ffffff;
+              border-radius: 12px;
+              padding: 16px;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+              border: 1px solid #f0f0f2;
+              position: relative;
+            }
+            .diary-card-tag {
+              font-size: 13px;
+              color: #8a8a8f;
+              margin-bottom: 10px;
+              display: flex;
+              align-items: center;
+              gap: 4px;
+              font-weight: 500;
+            }
+            .diary-card-content {
+              font-size: 15px;
+              line-height: 1.6;
+              color: #2c2c2c;
+              white-space: pre-wrap;
+              word-break: break-all;
+            }
+            .diary-card-footer {
+              margin-top: 12px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              border-top: 1px dashed #f2f2f5;
+              padding-top: 10px;
+            }
+            .diary-card-time {
+              font-size: 11px;
+              color: #b5b5be;
+              display: flex;
+              align-items: center;
+              gap: 4px;
+            }
+            .diary-actions {
+              display: flex;
+              gap: 12px;
+            }
+            .diary-btn-action {
+              background: none;
+              border: none;
+              color: #3fa9b5;
+              font-size: 12px;
+              cursor: pointer;
+              padding: 4px 0;
+              font-weight: 500;
+            }
+            .diary-btn-action.btn-delete {
+              color: #ff5b5b;
+            }
+            /* 空状态 */
+            .diary-empty {
+              text-align: center;
+              padding: 60px 20px;
+              color: #999;
+              font-size: 14px;
+            }
+            /* 浮动新建按钮 */
+            .diary-fab {
+              position: fixed;
+              bottom: 24px;
+              right: 24px;
+              width: 56px;
+              height: 56px;
+              border-radius: 50%;
+              background-color: #3fa9b5;
+              color: #ffffff;
+              border: none;
+              font-size: 28px;
+              cursor: pointer;
+              box-shadow: 0 4px 12px rgba(63, 169, 181, 0.4);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              z-index: 99;
+              transition: transform 0.2s;
+            }
+            .diary-fab:active {
+              transform: scale(0.95);
+            }
+            /* 模态弹窗通用样式 */
+            .diary-modal {
+              position: fixed;
+              top: 0;
+              left: 0;
+              width: 100%;
+              height: 100%;
+              background: rgba(0, 0, 0, 0.4);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              z-index: 1000;
+              padding: 16px;
+            }
+            .diary-modal-content {
+              background: #ffffff;
+              border-radius: 14px;
+              width: 100%;
+              max-width: 460px;
+              padding: 20px;
+              box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            }
+            .diary-modal-title {
+              font-size: 16px;
+              font-weight: 600;
+              margin-bottom: 14px;
+              color: #222;
+            }
+            .diary-input, .diary-textarea {
+              width: 100%;
+              background: #f5f5f7;
+              border: 1px solid #e5e5e7;
+              border-radius: 8px;
+              padding: 10px;
+              font-size: 14px;
+              margin-bottom: 12px;
+              outline: none;
+            }
+            .diary-textarea {
+              height: 140px;
+              resize: none;
+              line-height: 1.5;
+            }
+            .diary-modal-footer {
+              display: flex;
+              justify-content: flex-end;
+              gap: 10px;
+            }
+            .diary-btn {
+              padding: 8px 16px;
+              border-radius: 6px;
+              font-size: 14px;
+              cursor: pointer;
+              border: none;
+            }
+            .diary-btn-cancel {
+              background: #eaeaea;
+              color: #444;
+            }
+            .diary-btn-submit {
+              background: #3fa9b5;
+              color: #fff;
+            }
+            /* 角色选择列表样式 */
+            .diary-char-list {
+              max-height: 200px;
+              overflow-y: auto;
+              margin-bottom: 16px;
+              border: 1px solid #eee;
+              border-radius: 8px;
+            }
+            .diary-char-item {
+              display: flex;
+              align-items: center;
+              gap: 10px;
+              padding: 10px;
+              cursor: pointer;
+              border-bottom: 1px solid #f5f5f5;
+            }
+            .diary-char-item:last-child {
+              border-bottom: none;
+            }
+            .diary-char-item:hover {
+              background: #f0f9fa;
+            }
+            .diary-char-avatar {
+              width: 32px;
+              height: 32px;
+              border-radius: 50%;
+              background: #ccc;
+              object-fit: cover;
+            }
+            .diary-char-name {
+              font-size: 14px;
+              font-weight: 500;
+              color: #333;
+            }
+          `;
+          document.head.appendChild(style);
+        }
+
+        // 初始化基础视图结构
+        container.innerHTML = `
+          <div class="roche-plugin-diary">
+            <div class="diary-header">
+              <div class="diary-header-left">
+                <button class="diary-btn-back" id="diary-back-btn">←</button>
+                <div class="diary-filter-selectors">
+                  <select class="diary-select" id="diary-filter-year"></select>
+                  <select class="diary-select" id="diary-filter-month"></select>
+                </div>
+              </div>
+              <div class="diary-header-title">时光日记本</div>
+            </div>
+            
+            <div class="diary-timeline" id="diary-list-container"></div>
+            
+            <button class="diary-fab" id="diary-add-fab">+</button>
+          </div>
+        `;
+
+        // 核心运行状态管理
+        let diaries = (await roche.storage.get("diaries")) || [];
+        let currentYear = new Date().getFullYear().toString();
+        let currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+
+        // 提取现有的年月生成选择器选项
+        function updateSelectors() {
+          const yearSelect = container.querySelector("#diary-filter-year");
+          const monthSelect = container.querySelector("#diary-filter-month");
+          
+          // 确保当前年份和月份始终在备选项中
+          const years = new Set([new Date().getFullYear().toString()]);
+          diaries.forEach(d => d.year && years.add(d.year));
+          
+          yearSelect.innerHTML = Array.from(years).sort((a,b)=>b-a).map(y => `<option value="${y}">${y}年</option>`).join("");
+          yearSelect.value = currentYear;
+
+          const months = ["01","02","03","04","05","06","07","08","09","10","11","12"];
+          monthSelect.innerHTML = months.map(m => `<option value="${m}">${m}月</option>`).join("");
+          monthSelect.value = currentMonth;
+        }
+
+        // 渲染日记主列表
+        function renderDiaryList() {
+          const listContainer = container.querySelector("#diary-list-container");
+          
+          // 过滤当前选定年月的日记，并按日期和时间降序排列
+          const filtered = diaries.filter(d => d.year === currentYear && d.month === currentMonth);
+          filtered.sort((a, b) => {
+            const timeA = `${a.year}-${a.month}-${a.day} ${a.time}`;
+            const timeB = `${b.year}-${b.month}-${b.day} ${b.time}`;
+            return timeB.localeCompare(timeA);
+          });
+
+          if (filtered.length === 0) {
+            listContainer.innerHTML = `<div class="diary-empty">在这个月份，你还没有写过日记呢 🍂</div>`;
+            return;
+          }
+
+          listContainer.innerHTML = filtered.map(item => `
+            <div class="diary-item" data-id="${item.id}">
+              <div class="diary-date-col">
+                <div class="diary-date-day">${item.day}</div>
+                <div class="diary-date-sub">${parseInt(item.month)}月, ${item.year}</div>
+              </div>
+              <div class="diary-card">
+                <div class="diary-card-tag">🔖 ${item.tag || "生活的散文诗"}</div>
+                <div class="diary-card-content">${escapeHtml(item.content)}</div>
+                <div class="diary-card-footer">
+                  <div class="diary-card-time">🕒 ${item.time}</div>
+                  <div class="diary-actions">
+                    <button class="diary-btn-action btn-forward" data-id="${item.id}">转发给角色</button>
+                    <button class="diary-btn-action btn-delete" data-id="${item.id}">删除</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          `).join("");
+
+          // 动态绑定行内操作按钮事件
+          listContainer.querySelectorAll(".btn-delete").forEach(btn => {
+            btn.onclick = async (e) => {
+              const id = e.target.getAttribute("data-id");
+              const ok = await roche.ui.confirm({ title: "删除日记", message: "确认要删除这篇日记吗？删除后不可恢复。" });
+              if (ok) {
+                diaries = diaries.filter(d => d.id !== id);
+                await roche.storage.set("diaries", diaries);
+                roche.ui.toast("已删除");
+                updateSelectors();
+                renderDiaryList();
+              }
+            };
+          });
+
+          listContainer.querySelectorAll(".btn-forward").forEach(btn => {
+            btn.onclick = (e) => {
+              const id = e.target.getAttribute("data-id");
+              const targetDiary = diaries.find(d => d.id === id);
+              if (targetDiary) openForwardModal(targetDiary);
+            };
+          });
+        }
+
+        // 字符安全转义，防止 XSS
+        function escapeHtml(str) {
+          return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        // 打开“新建日记”弹窗
+        function openNewDiaryModal() {
+          const modal = document.createElement("div");
+          modal.className = "diary-modal";
+          modal.innerHTML = `
+            <div class="diary-modal-content">
+              <div class="diary-modal-title">手写今日日记</div>
+              <input type="text" class="diary-input" id="modal-tag" placeholder="日记标签 (例如: 生活的散文诗)" value="生活的散文诗">
+              <textarea class="diary-textarea" id="modal-content" placeholder="记录下这一刻的想法..."></textarea>
+              <div class="diary-modal-footer">
+                <button class="diary-btn diary-btn-cancel" id="modal-cancel">取消</button>
+                <button class="diary-btn diary-btn-submit" id="modal-save">保存</button>
+              </div>
+            </div>
+          `;
+          container.appendChild(modal);
+
+          modal.querySelector("#modal-cancel").onclick = () => modal.remove();
+          modal.querySelector("#modal-save").onclick = async () => {
+            const tag = modal.querySelector("#modal-tag").value.trim();
+            const content = modal.querySelector("#modal-content").value.trim();
+            if (!content) {
+              roche.ui.toast("日记内容不能为空哦");
+              return;
+            }
+
+            const now = new Date();
+            const newDiary = {
+              id: crypto.randomUUID(),
+              year: now.getFullYear().toString(),
+              month: String(now.getMonth() + 1).padStart(2, '0'),
+              day: String(now.getDate()).padStart(2, '0'),
+              time: String(now.getHours()).padStart(2, '0') + ":" + String(now.getMinutes()).padStart(2, '0'),
+              tag: tag || "无标签",
+              content: content,
+              createdAt: Date.now()
+            };
+
+            diaries.push(newDiary);
+            await roche.storage.set("diaries", diaries);
+            roche.ui.toast("日记保存成功");
+            
+            // 写入成功后切回当前全新创建的年月
+            currentYear = newDiary.year;
+            currentMonth = newDiary.month;
+            
+            modal.remove();
+            updateSelectors();
+            renderDiaryList();
+          };
+        }
+
+        // 打开“转发给角色”选择弹窗
+        async function openForwardModal(diary) {
+          const chars = await roche.character.list();
+          if (!chars || chars.length === 0) {
+            roche.ui.toast("当前没有可用的角色。");
+            return;
+          }
+
+          const modal = document.createElement("div");
+          modal.className = "diary-modal";
+          
+          let charListHtml = chars.map(c => `
+            <div class="diary-char-item" data-conv-id="${c.conversationId}" data-name="${c.handle || c.name}">
+              <img class="diary-char-avatar" src="${c.avatar || ''}" onerror="this.style.display='none'">
+              <div class="diary-char-name">${c.handle || c.name}</div>
+            </div>
+          `).join("");
+
+          modal.innerHTML = `
+            <div class="diary-modal-content">
+              <div class="diary-modal-title">转发至角色主事实记忆</div>
+              <div style="font-size: 12px; color: #666; margin-bottom: 12px; line-height:1.4;">
+                选择一个角色，本篇日记将注入至该角色的长期记忆。卸载插件后，已注入的记忆不会丢失。
+              </div>
+              <div class="diary-char-list">${charListHtml}</div>
+              <div class="diary-modal-footer">
+                <button class="diary-btn diary-btn-cancel" id="forward-cancel">关闭</button>
+              </div>
+            </div>
+          `;
+          container.appendChild(modal);
+
+          modal.querySelector("#forward-cancel").onclick = () => modal.remove();
+
+          modal.querySelectorAll(".diary-char-item").forEach(item => {
+            item.onclick = async (e) => {
+              const currentTarget = e.currentTarget;
+              const convId = currentTarget.getAttribute("data-conv-id");
+              const charName = currentTarget.getAttribute("data-name");
+
+              if (!convId) {
+                roche.ui.toast("该角色暂未建立有效会话 ID，无法注入记忆。");
+                return;
+              }
+
+              const confirmForward = await roche.ui.confirm({
+                title: "同步记忆确认",
+                message: `确定要将这篇发布于 ${diary.year}-${diary.month}-${diary.day} 的日记转发给【${charName}】吗？`
+              });
+
+              if (confirmForward) {
+                try {
+                  await roche.memory.write({
+                    conversationId: convId,
+                    summaryText: `【用户共享日记 - 🔖${diary.tag}】\n日记日期：${diary.year}年${diary.month}月${diary.day}日 ${diary.time}\n正文内容：${diary.content}`,
+                    who: ["用户"],
+                    action: "撰写并分享了一篇深层心境日记给角色",
+                    when: `${diary.year}年${diary.month}月${diary.day}日`,
+                    where: "时空日记插件",
+                    source: "roche-time-diary"
+                  });
+                  roche.ui.toast(`已成功同步给 ${charName} 的记忆库！`);
+                  modal.remove();
+                } catch (err) {
+                  roche.ui.toast("同步失败，请检查控制台错误日志。");
+                  console.error(err);
+                }
+              }
+            };
+          });
+        }
+
+        // 基础过滤器与原生功能按钮绑定
+        container.querySelector("#diary-filter-year").onchange = (e) => {
+          currentYear = e.target.value;
+          renderDiaryList();
+        };
+        container.querySelector("#diary-filter-month").onchange = (e) => {
+          currentMonth = e.target.value;
+          renderDiaryList();
+        };
+        container.querySelector("#diary-add-fab").onclick = () => {
+          openNewDiaryModal();
+        };
+        container.querySelector("#diary-back-btn").onclick = () => {
+          roche.ui.closeApp();
+        };
+
+        // 首次加载视图渲染
+        updateSelectors();
+        renderDiaryList();
+      },
+
+      async unmount(container, roche) {
+        // 彻底释放内存：清空子节点，移除动态注入的插件样式
+        container.replaceChildren();
+        const styleNode = document.getElementById("roche-plugin-diary-style");
+        if (styleNode) styleNode.remove();
+      }
+    }
+  ]
+});
